@@ -1597,8 +1597,8 @@ function renderDashboard() {
   if (wrapCumul) wrapCumul.innerHTML = soldeCecileHtml;
 
   // Métriques (8 cases colorées)
-  const extRevMois2 = extRevsMoisM;
-  const totalRevExtra2 = totalRevExtraM;
+  const extRevsMoisDash = (state.revenusExtra||[]).filter(r=>r.month===m&&r.year===y);
+  const totalRevExtra2 = extRevsMoisDash.reduce((s,r)=>s+r.montant,0);
   const totalRevFixes2 = totalRevFixes;
   const fraisExt2 = fraisPourFille('lucie','extraordinaire',m,y).concat(fraisPourFille('clotilde','extraordinaire',m,y));
   const totalFraisExt2 = fraisExt2.reduce((s,f)=>s+f.montant,0);

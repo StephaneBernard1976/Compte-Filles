@@ -3349,28 +3349,30 @@ function openModal(action, fille, type, id) {
   document.getElementById('modal-overlay').classList.add('open');
 }
 
+function fermerPanel() {
+  // Sauvegarder les modifications de montants/labels (pas les suppressions)
+  const editList = document.getElementById('edit-list');
+  if (editList) {
+    editList.querySelectorAll('.edit-row').forEach(row => {
+      if (row.dataset.type === 'rev') saveRevFixe(row.dataset.key, true);
+      else if (row.dataset.type === 'ff') saveFraisFixe(row.dataset.key, true);
+    });
+  }
+  closeModal();
+}
+
 function closeModal(e) {
   if (e && e.target !== document.getElementById('modal-overlay')) return;
-  // Sauvegarder les lignes du panneau SEULEMENT via le bouton Fermer (pas après suppression)
-  if (!_deletingInProgress) {
-    const editList = document.getElementById('edit-list');
-    if (editList) {
-      editList.querySelectorAll('.edit-row').forEach(row => {
-        if (row.dataset.type === 'rev') saveRevFixe(row.dataset.key, true);
-        else if (row.dataset.type === 'ff') saveFraisFixe(row.dataset.key, true);
-      });
-    }
-  }
   document.getElementById('modal-overlay').classList.remove('open');
   const saveBtn = document.getElementById('modal-save-btn');
   if (saveBtn) saveBtn.style.display = '';
   const box = document.getElementById('modal-box');
   if (box) box.style.width = '';
-  // Push immédiat à Firebase (une seule fois)
+  // Push final à Firebase
   state._savedAt = Date.now();
   _lastSaveTs = state._savedAt;
   if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
-  pushToFirebase(state);
+  pushToFirebaseXHR(state);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
   if (document.getElementById('page-dashboard') && document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
 }

@@ -293,6 +293,9 @@
   }
 
 </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -357,7 +360,7 @@
         Paramètres
       </div>
 
-      <div style="padding:6px 16px;font-size:10px;color:var(--text3);text-align:center" id="sync-indicator">⬤ local</div>
+      <div style="padding:6px 16px;font-size:10px;color:var(--text3);text-align:center" id="sync-indicator">⬤ connexion...</div>
     <div class="sidebar-footer">
         <div class="sidebar-user">Connecté en tant que</div>
         <div class="sidebar-username" id="sidebar-username">—</div>
@@ -936,14 +939,20 @@ function defaultState() {
   };
 }
 
-// ─── Configuration JSONBin ────────────────────────────────────
-const JSONBIN_BIN_ID = '69f731a9856a6821899f0cf5';
-const JSONBIN_API_KEY = '$2a$10$YPG.H5uVUWaGW0AtfcT37ux9shyf4bKDHwxq3kYSKl2zOFiGKuqhW';
-const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID;
+// ─── Firebase config ─────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyClWVH3g6Mzl1hywj6lPeN4tE998VLFrIo",
+  authDomain: "cockpit-famille.firebaseapp.com",
+  databaseURL: "https://cockpit-famille-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "cockpit-famille",
+  storageBucket: "cockpit-famille.firebasestorage.app",
+  messagingSenderId: "930499662082",
+  appId: "1:930499662082:web:1cac6fa171cda8d133721b"
+};
 
-let _lastServerTs = 0;
-let _saveTimeout = null;
-let _mem = {};
+let _db = null;
+let _dbRef = null;
+let _listening = false;
 
 function migrateState(p) {
   if (!p.fraisFixes) p.fraisFixes = defaultState().fraisFixes;
@@ -963,63 +972,56 @@ function migrateState(p) {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) { return migrateState(JSON.parse(raw)); }
+    if (raw) return migrateState(JSON.parse(raw));
   } catch(e) {}
   return defaultState();
 }
 
+let _saveTimeout = null;
 function saveState() {
   const s = JSON.stringify(state);
   try { localStorage.setItem(STORAGE_KEY, s); } catch(e) {}
   if (_saveTimeout) clearTimeout(_saveTimeout);
-  _saveTimeout = setTimeout(() => pushToServer(state), 500);
+  _saveTimeout = setTimeout(() => pushToFirebase(state), 500);
 }
 
-async function pushToServer(stateToSave) {
+async function pushToFirebase(stateToSave) {
   const ind = document.getElementById('sync-indicator');
+  if (!_dbRef) return;
   try {
     if (ind) { ind.textContent = '⬤ sync...'; ind.style.color = '#f0a500'; }
-    const res = await fetch(JSONBIN_URL, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': JSONBIN_API_KEY,
-        'X-Bin-Versioning': 'false'
-      },
-      body: JSON.stringify(stateToSave)
-    });
-    if (res.ok) {
-      const j = await res.json();
-      _lastServerTs = Date.now();
-      if (ind) { ind.textContent = '⬤ synchronisé'; ind.style.color = '#1D9E75'; setTimeout(() => { if(ind) ind.textContent = '⬤ en ligne'; }, 2000); }
-    } else {
-      if (ind) { ind.textContent = '⬤ erreur sync'; ind.style.color = '#C0392B'; }
-    }
+    await firebase.database().ref('state').set(stateToSave);
+    if (ind) { ind.textContent = '⬤ en ligne'; ind.style.color = '#1D9E75'; }
   } catch(e) {
     if (ind) { ind.textContent = '⬤ hors ligne'; ind.style.color = '#888'; }
   }
 }
 
-async function pullFromServer() {
+function initFirebase() {
   try {
-    const res = await fetch(JSONBIN_URL + '/latest', {
-      headers: { 'X-Master-Key': JSONBIN_API_KEY },
-      cache: 'no-store'
-    });
-    if (!res.ok) return;
-    const j = await res.json();
-    if (!j.record) return;
-    const serverTs = new Date(j.metadata?.createdAt || 0).getTime();
-    if (serverTs <= _lastServerTs) return;
-    _lastServerTs = serverTs;
-    const newState = migrateState(j.record);
-    const s = JSON.stringify(newState);
-    if (s !== JSON.stringify(state)) {
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    _db = firebase.database();
+    _dbRef = _db.ref('state');
+
+    // Écouter les changements en temps réel
+    _dbRef.on('value', (snapshot) => {
+      const ind = document.getElementById('sync-indicator');
+      if (ind) { ind.textContent = '⬤ en ligne'; ind.style.color = '#1D9E75'; }
+      const data = snapshot.val();
+      if (!data) return;
+      const newState = migrateState(data);
+      const s = JSON.stringify(newState);
+      if (s === JSON.stringify(state)) return; // pas de changement
       state = newState;
       try { localStorage.setItem(STORAGE_KEY, s); } catch(e) {}
       refreshCurrentPage();
-    }
-  } catch(e) {}
+    }, (err) => {
+      const ind = document.getElementById('sync-indicator');
+      if (ind) { ind.textContent = '⬤ erreur'; ind.style.color = '#C0392B'; }
+    });
+  } catch(e) {
+    console.error('Firebase init error:', e);
+  }
 }
 
 function refreshCurrentPage() {
@@ -1038,13 +1040,6 @@ function refreshCurrentPage() {
       break;
     }
   }
-}
-
-function startPolling() {
-  // Charger immédiatement au démarrage
-  pullFromServer();
-  // Puis toutes les 15 secondes
-  setInterval(pullFromServer, 15000);
 }
 
 let state = loadState();

@@ -2461,7 +2461,10 @@ function deleteFraisFixeInline(id) {
   const ff = (state.fraisFixes||[]).find(f=>f.id===id);
   if (ff) logAction('Frais fixe supprimé : <strong>' + ff.label + '</strong>');
   state.fraisFixes = (state.fraisFixes||[]).filter(f=>f.id!==id);
-  saveState();
+  // Forcer push immédiat à Firebase avant le re-render
+  if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
+  pushToFirebase(state);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
   if (document.getElementById('edit-list')) openEditPanel('frais-fixes');
   renderDashboard();
 }
@@ -3319,6 +3322,12 @@ function closeModal(e) {
   if (saveBtn) saveBtn.style.display = '';
   const box = document.getElementById('modal-box');
   if (box) box.style.width = '';
+  // Push immédiat à Firebase
+  if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
+  pushToFirebase(state);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
+  pushToFirebase(state);
   if (document.getElementById('page-dashboard') && document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
 }
 

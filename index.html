@@ -993,6 +993,7 @@ const FB_URL = firebaseConfig.databaseURL + '/cockpit.json';
 let _pollInterval = null;
 let _lastHash = '';
 let _isPushing = false;
+let _deletingInProgress = false;
 
 function setIndicator(text, color) {
   const ind = document.getElementById('sync-indicator');
@@ -2437,12 +2438,18 @@ function saveRevFixe(key, silent) {
 
 function deleteRevFixe(key, fille) {
   if (!confirm('Supprimer ce revenu fixe ?')) return;
+  _deletingInProgress = true;
   const r = state.revenus[key];
   if (r) logAction('Revenu fixe supprimé : <strong>' + r.label + '</strong>');
   delete state.revenus[key];
-  saveState();
+  state._savedAt = Date.now();
+  _lastSaveTs = state._savedAt;
+  if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
+  pushToFirebase(state);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
   if (document.getElementById('edit-list')) openEditPanel('rev-fixes');
   renderDashboard();
+  setTimeout(() => { _deletingInProgress = false; }, 1000);
 }
 
 function saveFraisFixe(id, silent) {
@@ -2469,10 +2476,10 @@ function saveFraisFixe(id, silent) {
 
 function deleteFraisFixeInline(id) {
   if (!confirm('Supprimer ce frais fixe ?')) return;
+  _deletingInProgress = true;
   const ff = (state.fraisFixes||[]).find(f=>f.id===id);
   if (ff) logAction('Frais fixe supprimé : <strong>' + ff.label + '</strong>');
   state.fraisFixes = (state.fraisFixes||[]).filter(f=>f.id!==id);
-  // Mettre à jour timestamp ET forcer push immédiat
   state._savedAt = Date.now();
   _lastSaveTs = state._savedAt;
   if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
@@ -2480,6 +2487,7 @@ function deleteFraisFixeInline(id) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
   if (document.getElementById('edit-list')) openEditPanel('frais-fixes');
   renderDashboard();
+  setTimeout(() => { _deletingInProgress = false; }, 1000);
 }
 
 function toggleCumulTexte() {
@@ -3322,25 +3330,27 @@ function openModal(action, fille, type, id) {
 
 function closeModal(e) {
   if (e && e.target !== document.getElementById('modal-overlay')) return;
-  // Sauvegarder toutes les lignes du panneau d'édition
-  const editList = document.getElementById('edit-list');
-  if (editList) {
-    editList.querySelectorAll('.edit-row').forEach(row => {
-      if (row.dataset.type === 'rev') saveRevFixe(row.dataset.key, true);
-      else if (row.dataset.type === 'ff') saveFraisFixe(row.dataset.key, true);
-    });
+  // Sauvegarder les lignes du panneau SEULEMENT via le bouton Fermer (pas après suppression)
+  if (!_deletingInProgress) {
+    const editList = document.getElementById('edit-list');
+    if (editList) {
+      editList.querySelectorAll('.edit-row').forEach(row => {
+        if (row.dataset.type === 'rev') saveRevFixe(row.dataset.key, true);
+        else if (row.dataset.type === 'ff') saveFraisFixe(row.dataset.key, true);
+      });
+    }
   }
   document.getElementById('modal-overlay').classList.remove('open');
   const saveBtn = document.getElementById('modal-save-btn');
   if (saveBtn) saveBtn.style.display = '';
   const box = document.getElementById('modal-box');
   if (box) box.style.width = '';
-  // Push immédiat à Firebase
+  // Push immédiat à Firebase (une seule fois)
+  state._savedAt = Date.now();
+  _lastSaveTs = state._savedAt;
   if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
   pushToFirebase(state);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
-  if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
-  pushToFirebase(state);
   if (document.getElementById('page-dashboard') && document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
 }
 

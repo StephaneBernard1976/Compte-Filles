@@ -990,7 +990,7 @@ function saveState() {
 // pushToFirebase défini ci-dessus
 
 // ─── Firebase REST API (sans SDK) ────────────────────────────
-const FB_URL = firebaseConfig.databaseURL + '/cockpit.json';
+const FB_URL = firebaseConfig.databaseURL + '/cockpit/data.json';
 let _pollInterval = null;
 let _lastHash = '';
 let _isPushing = false;
@@ -1012,8 +1012,9 @@ async function pushToFirebase(stateToSave) {
   _isPushing = true;
   setIndicator('⬤ sync...', '#f0a500');
   try {
-    const body = JSON.stringify(stateToSave);
-    _lastHash = body;
+    const prepared = prepareForFirebase(stateToSave);
+    const body = JSON.stringify(prepared);
+    _lastHash = JSON.stringify(stateToSave);
     _lastSaveTs = stateToSave._savedAt || Date.now();
     const res = await fetch(FB_URL, {
       method: 'PUT',
@@ -1032,13 +1033,47 @@ async function pushToFirebase(stateToSave) {
   }
 }
 
+function prepareForFirebase(stateToSave) {
+  const s = JSON.parse(JSON.stringify(stateToSave));
+  // Convertir les tableaux en objets keyés pour éviter leur suppression par Firebase
+  if (Array.isArray(s.fraisFixes)) {
+    const obj = {'__isArray': true};
+    s.fraisFixes.forEach((f,i) => { obj['i'+i] = f; });
+    s.fraisFixes = obj;
+  }
+  if (Array.isArray(s.revenusExtra)) {
+    const obj = {'__isArray': true};
+    s.revenusExtra.forEach((r,i) => { obj['i'+i] = r; });
+    s.revenusExtra = obj;
+  }
+  if (Array.isArray(s.frais)) {
+    const obj = {'__isArray': true};
+    s.frais.forEach((f,i) => { obj['i'+i] = f; });
+    s.frais = obj;
+  }
+  return s;
+}
+
+function restoreFromFirebase(data) {
+  // Reconvertir les objets keyés en tableaux
+  ['fraisFixes','revenusExtra','frais'].forEach(key => {
+    if (!data[key]) { data[key] = []; return; }
+    if (data[key].__isArray !== undefined) {
+      const arr = [];
+      Object.keys(data[key]).filter(k=>k!=='__isArray').sort().forEach(k => arr.push(data[key][k]));
+      data[key] = arr;
+    }
+  });
+  return data;
+}
+
 function pushToFirebaseXHR(stateToSave) {
-  // Version synchrone bloquante — garantit que Firebase reçoit avant tout re-render
-  const body = JSON.stringify(stateToSave);
-  _lastHash = body;
+  const prepared = prepareForFirebase(stateToSave);
+  const body = JSON.stringify(prepared);
+  _lastHash = JSON.stringify(stateToSave);
   _lastSaveTs = stateToSave._savedAt || Date.now();
   const xhr = new XMLHttpRequest();
-  xhr.open('PUT', FB_URL, false); // false = synchrone
+  xhr.open('PUT', FB_URL, false);
   xhr.setRequestHeader('Content-Type', 'application/json');
   try {
     xhr.send(body);
@@ -1065,10 +1100,8 @@ async function pullFromFirebase() {
     const serverTs = data._savedAt || 0;
     if (serverTs < _lastSaveTs) return; // on a des données plus récentes
     _lastHash = s;
-    // Firebase supprime les tableaux vides — les restaurer comme []
-    if (!data.fraisFixes) data.fraisFixes = [];
-    if (!data.revenusExtra) data.revenusExtra = [];
-    if (!data.frais) data.frais = [];
+    // Restaurer les sentinels Firebase en tableaux vides
+    data = restoreFromFirebase(data);
     const newState = migrateState(data);
     const ns = JSON.stringify(newState);
     if (ns === JSON.stringify(state)) return;

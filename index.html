@@ -976,11 +976,14 @@ function loadState() {
 }
 
 let _saveTimeout = null;
+let _lastSaveTs = 0;
 function saveState() {
+  state._savedAt = Date.now();
+  _lastSaveTs = state._savedAt;
   const s = JSON.stringify(state);
   try { localStorage.setItem(STORAGE_KEY, s); } catch(e) {}
   if (_saveTimeout) clearTimeout(_saveTimeout);
-  _saveTimeout = setTimeout(() => pushToFirebase(state), 500);
+  _saveTimeout = setTimeout(() => pushToFirebase(state), 300);
 }
 
 // pushToFirebase défini ci-dessus
@@ -1035,11 +1038,15 @@ async function pullFromFirebase() {
     if (!data) return;
     const s = JSON.stringify(data);
     if (s === _lastHash) return; // pas de changement
+    // Ignorer si nos données locales sont plus récentes
+    const serverTs = data._savedAt || 0;
+    if (serverTs < _lastSaveTs) return; // on a des données plus récentes
     _lastHash = s;
     const newState = migrateState(data);
     const ns = JSON.stringify(newState);
     if (ns === JSON.stringify(state)) return;
     state = newState;
+    _lastSaveTs = serverTs;
     try { localStorage.setItem(STORAGE_KEY, ns); } catch(e) {}
     setIndicator('⬤ en ligne', '#1D9E75');
     refreshCurrentPage();

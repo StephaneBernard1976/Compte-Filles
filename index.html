@@ -2472,7 +2472,9 @@ function deleteFraisFixeInline(id) {
   const ff = (state.fraisFixes||[]).find(f=>f.id===id);
   if (ff) logAction('Frais fixe supprimé : <strong>' + ff.label + '</strong>');
   state.fraisFixes = (state.fraisFixes||[]).filter(f=>f.id!==id);
-  // Forcer push immédiat à Firebase avant le re-render
+  // Mettre à jour timestamp ET forcer push immédiat
+  state._savedAt = Date.now();
+  _lastSaveTs = state._savedAt;
   if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
   pushToFirebase(state);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}

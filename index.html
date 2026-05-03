@@ -1128,6 +1128,7 @@ function doLogin() {
   document.getElementById('sidebar-username').textContent = user.label;
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
+  initFirebase();
   renderJournal();
   navigate('dashboard');
 }

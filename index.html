@@ -293,9 +293,9 @@
   }
 
 </style>
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <!-- Firebase SDK v8 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body>
 
@@ -990,37 +990,55 @@ async function pushToFirebase(stateToSave) {
   if (!_dbRef) return;
   try {
     if (ind) { ind.textContent = '⬤ sync...'; ind.style.color = '#f0a500'; }
-    await firebase.database().ref('state').set(stateToSave);
+    await _dbRef.set(stateToSave);
     if (ind) { ind.textContent = '⬤ en ligne'; ind.style.color = '#1D9E75'; }
   } catch(e) {
+    console.error('Firebase write error:', e);
     if (ind) { ind.textContent = '⬤ hors ligne'; ind.style.color = '#888'; }
   }
 }
 
 function initFirebase() {
   try {
+    const ind = document.getElementById('sync-indicator');
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     _db = firebase.database();
-    _dbRef = _db.ref('state');
+    _dbRef = _db.ref('cockpit');
 
-    // Écouter les changements en temps réel
-    _dbRef.on('value', (snapshot) => {
-      const ind = document.getElementById('sync-indicator');
-      if (ind) { ind.textContent = '⬤ en ligne'; ind.style.color = '#1D9E75'; }
+    // Lire une fois au démarrage
+    _dbRef.once('value').then((snapshot) => {
       const data = snapshot.val();
-      if (!data) return;
-      const newState = migrateState(data);
-      const s = JSON.stringify(newState);
-      if (s === JSON.stringify(state)) return; // pas de changement
-      state = newState;
-      try { localStorage.setItem(STORAGE_KEY, s); } catch(e) {}
-      refreshCurrentPage();
-    }, (err) => {
-      const ind = document.getElementById('sync-indicator');
-      if (ind) { ind.textContent = '⬤ erreur'; ind.style.color = '#C0392B'; }
+      if (data) {
+        const newState = migrateState(data);
+        state = newState;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newState)); } catch(e) {}
+        refreshCurrentPage();
+      } else {
+        // Première utilisation — envoyer l'état local
+        _dbRef.set(state);
+      }
+      if (ind) { ind.textContent = '⬤ en ligne'; ind.style.color = '#1D9E75'; }
+
+      // Puis écouter les changements en temps réel
+      _dbRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+        const newState = migrateState(data);
+        const s = JSON.stringify(newState);
+        if (s === JSON.stringify(state)) return;
+        state = newState;
+        try { localStorage.setItem(STORAGE_KEY, s); } catch(e) {}
+        if (ind) { ind.textContent = '⬤ en ligne'; ind.style.color = '#1D9E75'; }
+        refreshCurrentPage();
+      });
+    }).catch((err) => {
+      console.error('Firebase read error:', err);
+      if (ind) { ind.textContent = '⬤ hors ligne'; ind.style.color = '#888'; }
     });
   } catch(e) {
     console.error('Firebase init error:', e);
+    const ind = document.getElementById('sync-indicator');
+    if (ind) { ind.textContent = '⬤ erreur init'; ind.style.color = '#C0392B'; }
   }
 }
 

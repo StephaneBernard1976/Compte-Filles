@@ -293,9 +293,7 @@
   }
 
 </style>
-  <!-- Firebase SDK v8 -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
 </head>
 <body>
 
@@ -985,60 +983,61 @@ function saveState() {
   _saveTimeout = setTimeout(() => pushToFirebase(state), 500);
 }
 
-async function pushToFirebase(stateToSave) {
+// pushToFirebase défini ci-dessus
+
+// ─── Firebase REST API (sans SDK) ────────────────────────────
+const FB_URL = firebaseConfig.databaseURL + '/cockpit.json';
+let _pollInterval = null;
+let _lastHash = '';
+
+function setIndicator(text, color) {
   const ind = document.getElementById('sync-indicator');
-  if (!_dbRef) return;
-  try {
-    if (ind) { ind.textContent = '⬤ sync...'; ind.style.color = '#f0a500'; }
-    await _dbRef.set(stateToSave);
-    if (ind) { ind.textContent = '⬤ en ligne'; ind.style.color = '#1D9E75'; }
-  } catch(e) {
-    console.error('Firebase write error:', e);
-    if (ind) { ind.textContent = '⬤ hors ligne'; ind.style.color = '#888'; }
-  }
+  if (ind) { ind.textContent = text; ind.style.color = color; }
 }
 
 function initFirebase() {
+  // Envoyer l'état local au démarrage
+  pushToFirebase(state);
+  // Polling toutes les 10 secondes pour détecter les changements
+  _pollInterval = setInterval(pullFromFirebase, 10000);
+}
+
+async function pushToFirebase(stateToSave) {
+  setIndicator('⬤ sync...', '#f0a500');
   try {
-    const ind = document.getElementById('sync-indicator');
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    _db = firebase.database();
-    _dbRef = _db.ref('cockpit');
-
-    // Lire une fois au démarrage
-    _dbRef.once('value').then((snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const newState = migrateState(data);
-        state = newState;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newState)); } catch(e) {}
-        refreshCurrentPage();
-      } else {
-        // Première utilisation — envoyer l'état local
-        _dbRef.set(state);
-      }
-      if (ind) { ind.textContent = '⬤ en ligne'; ind.style.color = '#1D9E75'; }
-
-      // Puis écouter les changements en temps réel
-      _dbRef.on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (!data) return;
-        const newState = migrateState(data);
-        const s = JSON.stringify(newState);
-        if (s === JSON.stringify(state)) return;
-        state = newState;
-        try { localStorage.setItem(STORAGE_KEY, s); } catch(e) {}
-        if (ind) { ind.textContent = '⬤ en ligne'; ind.style.color = '#1D9E75'; }
-        refreshCurrentPage();
-      });
-    }).catch((err) => {
-      console.error('Firebase read error:', err);
-      if (ind) { ind.textContent = '⬤ hors ligne'; ind.style.color = '#888'; }
+    const res = await fetch(FB_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(stateToSave)
     });
+    if (res.ok) {
+      setIndicator('⬤ en ligne', '#1D9E75');
+    } else {
+      setIndicator('⬤ erreur ' + res.status, '#C0392B');
+    }
   } catch(e) {
-    console.error('Firebase init error:', e);
-    const ind = document.getElementById('sync-indicator');
-    if (ind) { ind.textContent = '⬤ erreur init'; ind.style.color = '#C0392B'; }
+    setIndicator('⬤ hors ligne', '#888');
+  }
+}
+
+async function pullFromFirebase() {
+  try {
+    const res = await fetch(FB_URL + '?shallow=false', { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data) return;
+    const s = JSON.stringify(data);
+    if (s === _lastHash) return; // pas de changement
+    _lastHash = s;
+    const newState = migrateState(data);
+    const ns = JSON.stringify(newState);
+    if (ns === JSON.stringify(state)) return;
+    state = newState;
+    try { localStorage.setItem(STORAGE_KEY, ns); } catch(e) {}
+    setIndicator('⬤ en ligne', '#1D9E75');
+    refreshCurrentPage();
+  } catch(e) {
+    setIndicator('⬤ hors ligne', '#888');
   }
 }
 

@@ -989,6 +989,7 @@ function saveState() {
 const FB_URL = firebaseConfig.databaseURL + '/cockpit.json';
 let _pollInterval = null;
 let _lastHash = '';
+let _isPushing = false;
 
 function setIndicator(text, color) {
   const ind = document.getElementById('sync-indicator');
@@ -1003,27 +1004,30 @@ function initFirebase() {
 }
 
 async function pushToFirebase(stateToSave) {
+  _isPushing = true;
   setIndicator('⬤ sync...', '#f0a500');
   try {
     const body = JSON.stringify(stateToSave);
+    _lastHash = body; // Mettre à jour immédiatement pour bloquer le pull
     const res = await fetch(FB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: body
     });
     if (res.ok) {
-      // Mettre à jour _lastHash pour éviter que le pull suivant réécrase
-      _lastHash = JSON.stringify(stateToSave);
       setIndicator('⬤ en ligne', '#1D9E75');
     } else {
       setIndicator('⬤ erreur ' + res.status, '#C0392B');
     }
   } catch(e) {
     setIndicator('⬤ hors ligne', '#888');
+  } finally {
+    setTimeout(() => { _isPushing = false; }, 2000); // Bloquer pull 2 secondes après push
   }
 }
 
 async function pullFromFirebase() {
+  if (_isPushing) return; // Ne pas écraser pendant un push
   try {
     const res = await fetch(FB_URL + '?shallow=false', { cache: 'no-store' });
     if (!res.ok) return;

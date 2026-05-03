@@ -358,7 +358,7 @@
         Paramètres
       </div>
 
-      <div style="padding:6px 16px;font-size:10px;color:var(--text3);text-align:center" id="sync-indicator">⬤ connexion...</div>
+      <div style="padding:6px 16px;font-size:10px;color:var(--text3);text-align:center" id="sync-indicator">⬤ local</div>
     <div class="sidebar-footer">
         <div class="sidebar-user">Connecté en tant que</div>
         <div class="sidebar-username" id="sidebar-username">—</div>
@@ -1005,12 +1005,15 @@ function initFirebase() {
 async function pushToFirebase(stateToSave) {
   setIndicator('⬤ sync...', '#f0a500');
   try {
+    const body = JSON.stringify(stateToSave);
     const res = await fetch(FB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(stateToSave)
+      body: body
     });
     if (res.ok) {
+      // Mettre à jour _lastHash pour éviter que le pull suivant réécrase
+      _lastHash = JSON.stringify(stateToSave);
       setIndicator('⬤ en ligne', '#1D9E75');
     } else {
       setIndicator('⬤ erreur ' + res.status, '#C0392B');
@@ -1134,6 +1137,11 @@ function doLogin() {
 }
 
 document.getElementById('login-pw').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+// Démarrer Firebase dès le chargement de la page
+window.addEventListener('load', () => {
+  setTimeout(initFirebase, 500);
+});
 
 function doLogout() {
   currentUser = null;

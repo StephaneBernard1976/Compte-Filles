@@ -953,7 +953,8 @@ let _dbRef = null;
 let _listening = false;
 
 function migrateState(p) {
-  if (!p.fraisFixes) p.fraisFixes = defaultState().fraisFixes;
+  if (!('fraisFixes' in p)) p.fraisFixes = defaultState().fraisFixes;
+  if (p.fraisFixes === null || p.fraisFixes === undefined) p.fraisFixes = [];
   if (!p.repartitionFixe) p.repartitionFixe = { stephane: 65, cecile: 35 };
   if (!p.repartitionHistory) p.repartitionHistory = [{ stephane: p.repartitionFixe.stephane, debutMonth: 0, debutYear: new Date().getFullYear(), finMonth: null, finYear: null }];
   if (!p.repartitionExtra) p.repartitionExtra = { stephane: 50, cecile: 50 };
@@ -1064,6 +1065,10 @@ async function pullFromFirebase() {
     const serverTs = data._savedAt || 0;
     if (serverTs < _lastSaveTs) return; // on a des données plus récentes
     _lastHash = s;
+    // Firebase supprime les tableaux vides — les restaurer comme []
+    if (!data.fraisFixes) data.fraisFixes = [];
+    if (!data.revenusExtra) data.revenusExtra = [];
+    if (!data.frais) data.frais = [];
     const newState = migrateState(data);
     const ns = JSON.stringify(newState);
     if (ns === JSON.stringify(state)) return;

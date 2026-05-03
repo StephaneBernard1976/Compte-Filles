@@ -1012,7 +1012,8 @@ async function pushToFirebase(stateToSave) {
   setIndicator('⬤ sync...', '#f0a500');
   try {
     const body = JSON.stringify(stateToSave);
-    _lastHash = body; // Mettre à jour immédiatement pour bloquer le pull
+    _lastHash = body;
+    _lastSaveTs = stateToSave._savedAt || Date.now();
     const res = await fetch(FB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1026,7 +1027,27 @@ async function pushToFirebase(stateToSave) {
   } catch(e) {
     setIndicator('⬤ hors ligne', '#888');
   } finally {
-    setTimeout(() => { _isPushing = false; }, 2000); // Bloquer pull 2 secondes après push
+    setTimeout(() => { _isPushing = false; }, 3000);
+  }
+}
+
+function pushToFirebaseXHR(stateToSave) {
+  // Version synchrone bloquante — garantit que Firebase reçoit avant tout re-render
+  const body = JSON.stringify(stateToSave);
+  _lastHash = body;
+  _lastSaveTs = stateToSave._savedAt || Date.now();
+  const xhr = new XMLHttpRequest();
+  xhr.open('PUT', FB_URL, false); // false = synchrone
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  try {
+    xhr.send(body);
+    if (xhr.status === 200) {
+      setIndicator('⬤ en ligne', '#1D9E75');
+    } else {
+      setIndicator('⬤ erreur ' + xhr.status, '#C0392B');
+    }
+  } catch(e) {
+    setIndicator('⬤ hors ligne', '#888');
   }
 }
 
@@ -2483,11 +2504,11 @@ function deleteFraisFixeInline(id) {
   state._savedAt = Date.now();
   _lastSaveTs = state._savedAt;
   if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
-  pushToFirebase(state);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  pushToFirebaseXHR(state); // synchrone — Firebase reçoit AVANT le re-render
   if (document.getElementById('edit-list')) openEditPanel('frais-fixes');
   renderDashboard();
-  setTimeout(() => { _deletingInProgress = false; }, 1000);
+  setTimeout(() => { _deletingInProgress = false; }, 500);
 }
 
 function toggleCumulTexte() {

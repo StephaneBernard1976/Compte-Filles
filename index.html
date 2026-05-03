@@ -1465,8 +1465,8 @@ function renderMetrics() {
   }
 
   // Revenus extraordinaires du mois pour métriques
-  const extRevMois2 = extRevsMois;
-  const totalRevExtra2 = totalRevExtraMois;
+  const extRevMois2 = extRevsMoisM;
+  const totalRevExtra2 = totalRevExtraM;
   const totalRevFixes2 = totalRevFixes;
   const fraisExt2 = fraisPourFille('lucie','extraordinaire',m,y).concat(fraisPourFille('clotilde','extraordinaire',m,y));
   const totalFraisExt2 = fraisExt2.reduce((s,f)=>s+f.montant,0);
@@ -1597,8 +1597,8 @@ function renderDashboard() {
   if (wrapCumul) wrapCumul.innerHTML = soldeCecileHtml;
 
   // Métriques (8 cases colorées)
-  const extRevMois2 = extRevsMois;
-  const totalRevExtra2 = totalRevExtraMois;
+  const extRevMois2 = extRevsMoisM;
+  const totalRevExtra2 = totalRevExtraM;
   const totalRevFixes2 = totalRevFixes;
   const fraisExt2 = fraisPourFille('lucie','extraordinaire',m,y).concat(fraisPourFille('clotilde','extraordinaire',m,y));
   const totalFraisExt2 = fraisExt2.reduce((s,f)=>s+f.montant,0);

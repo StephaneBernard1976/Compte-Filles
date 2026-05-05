@@ -918,6 +918,7 @@ function defaultState() {
       allocClotilde:{ label: 'Allocation Clotilde', montant: 265, fille: 'clotilde', payePar: 'autre' },
     },
     revenusVerses: {},
+    revenusOrder: [],
     repartitionFixe: { stephane: 65, cecile: 35 },
     repartitionExtra: { stephane: 50, cecile: 50 },
     repartitionHistory: [{ stephane: 65, debutMonth: 0, debutYear: 2025, finMonth: null, finYear: null }],
@@ -1351,9 +1352,11 @@ function revenusPourFille(fille) {
 
 function revenusPourFilleActifs(fille, mm, yy) {
   if (!state.revenus) return [];
-  return Object.entries(state.revenus)
-    .filter(([,v]) => v && v.fille === fille && fixeActif(v, mm, yy))
-    .map(([k,v]) => ({ key: k, ...v }));
+  const order = (state.revenusOrder||[]).length ? state.revenusOrder : Object.keys(state.revenus);
+  Object.keys(state.revenus).forEach(k => { if (!order.includes(k)) order.push(k); });
+  return order
+    .filter(k => state.revenus[k] && state.revenus[k].fille === fille && fixeActif(state.revenus[k], mm, yy))
+    .map(k => ({ key: k, ...state.revenus[k] }));
 }
 
 function fraisFixesActifs(mm, yy) {
@@ -2490,11 +2493,7 @@ function openEditPanel(type) {
         // Sauvegarder le nouvel ordre
         const newOrder = [...list.querySelectorAll('.edit-row')].map(r => r.dataset.key);
         if (type === 'rev-fixes') {
-          const newRev = {};
-          newOrder.forEach(k => { if (state.revenus[k]) newRev[k] = state.revenus[k]; });
-          // Conserver les clés non affichées
-          Object.keys(state.revenus).forEach(k => { if (!newRev[k]) newRev[k] = state.revenus[k]; });
-          state.revenus = newRev;
+          state.revenusOrder = newOrder.concat(Object.keys(state.revenus).filter(k => !newOrder.includes(k)));
         } else {
           const ffMap = {};
           (state.fraisFixes||[]).forEach(f => { ffMap[f.id] = f; });
@@ -2538,6 +2537,7 @@ function deleteRevFixe(key, fille) {
   const r = state.revenus[key];
   if (r) logAction('Revenu fixe supprimé : <strong>' + r.label + '</strong>');
   delete state.revenus[key];
+  state.revenusOrder = (state.revenusOrder||[]).filter(k => k !== key);
   state._savedAt = Date.now();
   _lastSaveTs = state._savedAt;
   if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
@@ -3445,10 +3445,8 @@ function fermerPanel() {
     const newOrder = rows.map(r => r.dataset.key);
     const type = rows[0] ? rows[0].dataset.type : null;
     if (type === 'rev') {
-      const newRev = {};
-      newOrder.forEach(k => { if (state.revenus[k]) newRev[k] = state.revenus[k]; });
-      Object.keys(state.revenus).forEach(k => { if (!newRev[k]) newRev[k] = state.revenus[k]; });
-      state.revenus = newRev;
+      // Sauvegarder l'ordre explicitement
+      state.revenusOrder = newOrder.concat(Object.keys(state.revenus).filter(k => !newOrder.includes(k)));
     } else if (type === 'ff') {
       const ffMap = {};
       (state.fraisFixes||[]).forEach(f => { ffMap[f.id] = f; });
@@ -3561,6 +3559,8 @@ function modalSave() {
     const finYear = finValR ? finValR.year : null;
     const newKey = 'rev_' + Date.now();
     state.revenus[newKey] = { label, montant, fille, payePar, debutMonth, debutYear, finMonth, finYear };
+    if (!state.revenusOrder) state.revenusOrder = Object.keys(state.revenus);
+    if (!state.revenusOrder.includes(newKey)) state.revenusOrder.push(newKey);
     saveState();
     logAction('Revenu fixe ajouté : <strong>' + label + '</strong> ' + chf(montant));
     document.getElementById('modal-overlay').classList.remove('open');

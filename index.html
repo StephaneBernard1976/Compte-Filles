@@ -529,8 +529,8 @@
             <div id="db-solde-total-stephane-sub" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
           </div>
           <div id="db-cumul-wrap"></div>
-          <div class="card" style="border-left:3px solid #888">
-            <div style="font-size:13px;font-weight:600;color:#888;margin-bottom:6px">Solde total Cécile</div>
+          <div class="card" style="border-left:3px solid #555">
+            <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:6px">Solde total Cécile</div>
             <div id="db-solde-total-cecile" style="font-family:var(--mono);font-size:22px;font-weight:700"></div>
             <div id="db-solde-total-cecile-sub" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
           </div>
@@ -886,7 +886,7 @@
     <div class="modal-title" id="modal-title">Ajouter</div>
     <div id="modal-body"></div>
     <div class="modal-actions">
-      <button class="btn" onclick="closeModal(); document.getElementById('modal-save-btn').style.display=''; document.getElementById('modal-box').style.width='';">Fermer</button>
+      <button class="btn" onclick="fermerPanel()">Fermer</button>
       <button class="btn" id="modal-save-btn" onclick="modalSave()" style="background:white;color:#1D9E75;border:1px solid #1D9E75;font-weight:600">Enregistrer</button>
     </div>
   </div>
@@ -917,6 +917,7 @@ function defaultState() {
       maman2:      { label: 'Contribution Cécile', montant: 250,  fille: 'clotilde', payePar: 'cecile' },
       allocClotilde:{ label: 'Allocation Clotilde', montant: 265, fille: 'clotilde', payePar: 'autre' },
     },
+    revenusVerses: {},
     repartitionFixe: { stephane: 65, cecile: 35 },
     repartitionExtra: { stephane: 50, cecile: 50 },
     repartitionHistory: [{ stephane: 65, debutMonth: 0, debutYear: 2025, finMonth: null, finYear: null }],
@@ -1322,6 +1323,26 @@ function fixeActif(item, mm, yy) {
   return true;
 }
 
+function toggleVerseEl(el) {
+  const key = el.dataset.key;
+  const m = parseInt(el.dataset.m);
+  const y = parseInt(el.dataset.y);
+  toggleVerse(key, m, y);
+}
+
+function toggleVerse(key, m, y) {
+  if (!state.revenusVerses) state.revenusVerses = {};
+  const k = key + '_' + y + '_' + m;
+  state.revenusVerses[k] = !state.revenusVerses[k];
+  saveState();
+  renderDashboard();
+}
+
+function estVerse(key, m, y) {
+  if (!state.revenusVerses) return false;
+  return !!state.revenusVerses[key + '_' + y + '_' + m];
+}
+
 function revenusPourFille(fille) {
   return Object.entries(state.revenus)
     .filter(([,v]) => v.fille === fille)
@@ -1555,7 +1576,7 @@ function renderMetrics() {
   if (el) el.innerHTML = `
     <div class="mcard" style="background:rgba(29,158,117,0.06);border:1px solid rgba(29,158,117,0.2)"><div class="mcard-label" style="color:#111">Revenus fixes</div><div class="mcard-val g">${chf(totalRevFixes2)}</div><div class="mcard-sub">du mois</div></div>
     <div class="mcard" style="background:rgba(29,158,117,0.06);border:1px solid rgba(29,158,117,0.2)"><div class="mcard-label" style="color:#111">Revenus extraordinaires</div><div class="mcard-val g">${chf(totalRevExtra2)}</div><div class="mcard-sub">du mois</div></div>
-    <div class="mcard" style="background:var(--surface);border:2px solid #1D9E75"><div class="mcard-label" style="color:#111;font-weight:600">Revenus totaux</div><div class="mcard-val g">${chf(total)}</div><div class="mcard-sub">du mois</div></div>
+    <div class="mcard" style="background:var(--surface);border:2px solid #2D6A4F"><div class="mcard-label" style="color:#111;font-weight:600">Revenus totaux</div><div class="mcard-val g">${chf(total)}</div><div class="mcard-sub">du mois</div></div>
     <div class="mcard" style="background:rgba(192,57,43,0.05);border:1px solid rgba(192,57,43,0.18)"><div class="mcard-label" style="color:#111">Frais fixes</div><div class="mcard-val r">${chf(totalFraisFixes2)}</div><div class="mcard-sub">du mois</div></div>
     <div class="mcard" style="background:rgba(192,57,43,0.05);border:1px solid rgba(192,57,43,0.18)"><div class="mcard-label" style="color:#111">Frais extraordinaires</div><div class="mcard-val r">${chf(totalFraisExt2)}</div><div class="mcard-sub">du mois</div></div>
     <div class="mcard" style="background:var(--surface);border:2px solid #C0392B"><div class="mcard-label" style="color:#111;font-weight:600">Frais totaux</div><div class="mcard-val r">${chf(totalF)}</div><div class="mcard-sub">du mois</div></div>
@@ -1685,7 +1706,7 @@ function renderDashboard() {
   document.getElementById('db-metrics').innerHTML = `
     <div class="mcard" style="background:rgba(29,158,117,0.06);border:1px solid rgba(29,158,117,0.2)"><div class="mcard-label" style="color:#111">Revenus fixes</div><div class="mcard-val g">${chf(totalRevFixes2)}</div><div class="mcard-sub">du mois</div></div>
     <div class="mcard" style="background:rgba(29,158,117,0.06);border:1px solid rgba(29,158,117,0.2)"><div class="mcard-label" style="color:#111">Revenus extraordinaires</div><div class="mcard-val g">${chf(totalRevExtra2)}</div><div class="mcard-sub">du mois</div></div>
-    <div class="mcard" style="background:var(--surface);border:2px solid #1D9E75"><div class="mcard-label" style="color:#111;font-weight:600">Revenus totaux</div><div class="mcard-val g">${chf(total)}</div><div class="mcard-sub">du mois</div></div>
+    <div class="mcard" style="background:var(--surface);border:2px solid #2D6A4F"><div class="mcard-label" style="color:#111;font-weight:600">Revenus totaux</div><div class="mcard-val g">${chf(total)}</div><div class="mcard-sub">du mois</div></div>
     <div class="mcard" style="background:rgba(192,57,43,0.05);border:1px solid rgba(192,57,43,0.18)"><div class="mcard-label" style="color:#111">Frais fixes</div><div class="mcard-val r">${chf(totalFraisFixes2)}</div><div class="mcard-sub">du mois</div></div>
     <div class="mcard" style="background:rgba(192,57,43,0.05);border:1px solid rgba(192,57,43,0.18)"><div class="mcard-label" style="color:#111">Frais extraordinaires</div><div class="mcard-val r">${chf(totalFraisExt2)}</div><div class="mcard-sub">du mois</div></div>
     <div class="mcard" style="background:var(--surface);border:2px solid #C0392B"><div class="mcard-label" style="color:#111;font-weight:600">Frais totaux</div><div class="mcard-val r">${chf(totalF)}</div><div class="mcard-sub">du mois</div></div>
@@ -1736,17 +1757,20 @@ function renderDashboard() {
     const allRF = [...revenusPourFilleActifs('lucie',m,y), ...revenusPourFilleActifs('clotilde',m,y)];
     const totalRF = allRF.reduce((s,r)=>s+(r.montant||0),0);
     dbRevFixes.innerHTML = allRF.length
-      ? allRF.map(r =>
-          '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(29,158,117,0.1)">' +
-          '<div style="display:flex;align-items:center;gap:5px;min-width:0">' +
+      ? '<div style="display:flex;align-items:center;padding:0 0 4px 0;gap:6px"><span style="font-size:9px;font-weight:400;color:var(--text3);width:22px;text-align:center">Versé</span></div>' +
+        allRF.map(r => {
+          const verse = estVerse(r.key, m, y);
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(29,158,117,0.1)">' +
+          '<div style="display:flex;align-items:center;gap:6px;min-width:0">' +
+            '<input type="checkbox" ' + (verse?'checked':'') + ' data-key="' + r.key + '" data-m="' + m + '" data-y="' + y + '" onchange="toggleVerseEl(this)" style="width:15px;height:15px;cursor:pointer;accent-color:#1D9E75;flex-shrink:0">' +
             '<span style="font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + r.label + '</span>' +
             '<span class="tag ' + PAYE_TAG2[r.payePar||'autre'] + '" style="font-size:9px;padding:1px 5px;flex-shrink:0">' + PAYE_LBL2[r.payePar||'autre'] + '</span>' +
           '</div>' +
-          '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">' +
             '<span class="tag" style="font-size:9px;color:'+(r.fille==='lucie'?'var(--lucie)':'var(--clotilde)')+';border:1px solid '+(r.fille==='lucie'?'var(--lucie)':'var(--clotilde)')+';background:transparent;padding:1px 5px">'+(r.fille==='lucie'?'Lucie':'Clotilde')+'</span>' +
             '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:#1D9E75">' + chf(r.montant) + '</span>' +
-          '</div></div>'
-        ).join('') +
+          '</div></div>';
+        }).join('') +
         '<div style="display:flex;justify-content:space-between;font-weight:600;margin-top:8px;padding-top:6px;border-top:1px solid rgba(29,158,117,0.25)">' +
         '<span style="color:#1D9E75">Total fixes</span><span style="font-family:var(--mono);font-size:13px;color:#1D9E75">' + chf(totalRF) + '</span></div>'
       : '<div class="empty">Aucun revenu fixe actif ce mois</div>';
@@ -1775,13 +1799,19 @@ function renderDashboard() {
   if (dbFraisFixes) {
     const ffItems = fraisFixesActifs(m, y);
     dbFraisFixes.innerHTML = ffItems.length
-      ? ffItems.map(f =>
-          '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(192,57,43,0.1)">' +
-          '<span style="font-size:13px;color:var(--text)">' + f.label + '</span>' +
+      ? '<div style="display:flex;align-items:center;padding:0 0 4px 0"><span style="font-size:9px;font-weight:400;color:var(--text3);width:22px;text-align:center">Payé</span></div>' +
+        ffItems.map(f => {
+          const paye = estVerse('ff_'+f.id, m, y);
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(192,57,43,0.1)">' +
+          '<div style="display:flex;align-items:center;gap:6px;min-width:0">' +
+            '<input type="checkbox" ' + (paye?'checked':'') + ' data-key="ff_' + f.id + '" data-m="' + m + '" data-y="' + y + '" onchange="toggleVerseEl(this)" style="width:15px;height:15px;cursor:pointer;accent-color:#C0392B;flex-shrink:0">' +
+            '<span style="font-size:13px;color:var(--text)">' + f.label + '</span>' +
+          '</div>' +
           '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
-          '<span class="tag" style="font-size:9px;color:'+(f.fille==='lucie'?'var(--lucie)':'var(--clotilde)')+';border:1px solid '+(f.fille==='lucie'?'var(--lucie)':'var(--clotilde)')+';background:transparent;padding:1px 5px">'+(f.fille==='lucie'?'Lucie':'Clotilde')+'</span>' +
-          '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:#C0392B">' + chf(f.montant) + '</span></div></div>'
-        ).join('') +
+            '<span class="tag" style="font-size:9px;color:'+(f.fille==='lucie'?'var(--lucie)':'var(--clotilde)')+';border:1px solid '+(f.fille==='lucie'?'var(--lucie)':'var(--clotilde)')+';background:transparent;padding:1px 5px">'+(f.fille==='lucie'?'Lucie':'Clotilde')+'</span>' +
+            '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:#C0392B">' + chf(f.montant) + '</span>' +
+          '</div></div>';
+        }).join('') +
         '<div style="display:flex;justify-content:space-between;font-weight:600;margin-top:8px;padding-top:6px;border-top:1px solid rgba(192,57,43,0.25)">' +
         '<span style="color:#C0392B">Total fixes</span><span style="font-family:var(--mono);font-size:13px;color:#C0392B">' + chf(ffItems.reduce((s,f)=>s+f.montant,0)) + '</span></div>'
       : '<div class="empty">Aucun frais fixe actif ce mois</div>';
@@ -2301,7 +2331,7 @@ function deleteRevenuExtra(id) {
 
 function renderExtraordinaire() {
   const m = state.currentMonth, y = state.currentYear;
-  const pctSF = getRepartitionPct(mm, yy);
+  const pctSF = getRepartitionPct(m, y);
   const pctSE = state.repartitionExtra.stephane;
   let totalL = 0, totalC = 0;
 
@@ -2385,7 +2415,12 @@ function openEditPanel(type) {
             <input type="number" value="${r.montant}" style="width:80px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--mono);background:var(--bg);color:var(--text);text-align:right" id="rf-amt-${r.key}" />
             <button onclick="deleteRevFixe('${r.key}')" style="padding:4px 8px;background:none;border:1px solid rgba(192,57,43,0.4);color:#C0392B;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0">✕</button>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;padding-left:28px;font-size:11px;color:var(--text3)">
+          <div style="display:flex;align-items:center;gap:6px;padding-left:28px;font-size:11px;color:var(--text3);flex-wrap:wrap">
+            <select id="rf-payepar-${r.key}" style="padding:2px 4px;border:1px solid var(--border);border-radius:5px;font-size:11px;font-family:var(--font);background:var(--bg);color:var(--text)">
+              <option value="stephane" ${r.payePar==='stephane'?'selected':''}>Stéphane</option>
+              <option value="cecile" ${r.payePar==='cecile'?'selected':''}>Cécile</option>
+              <option value="autre" ${r.payePar==='autre'?'selected':''}>Autre</option>
+            </select>
             <span>Du</span>${monthSelect("rf-deb-"+r.key, r.debutYear||0, r.debutMonth||0, false)}
             <span>au</span>${monthSelect("rf-fin-"+r.key, r.finYear||null, r.finMonth||null, false)}
           </div>
@@ -2477,10 +2512,12 @@ function openEditPanel(type) {
 function saveRevFixe(key, silent) {
   const lbl = document.getElementById('rf-lbl-'+key);
   const amt = document.getElementById('rf-amt-'+key);
+  const pay = document.getElementById('rf-payepar-'+key);
   if (!lbl || !amt) return;
   if (!state.revenus[key]) return;
   state.revenus[key].label = lbl.value.trim();
   state.revenus[key].montant = parseFloat(amt.value) || 0;
+  if (pay) state.revenus[key].payePar = pay.value;
   const debVR = getMonthSelectVal('rf-deb-'+key);
   if (debVR) { state.revenus[key].debutYear=debVR.year; state.revenus[key].debutMonth=debVR.month; }
   else { state.revenus[key].debutYear=0; state.revenus[key].debutMonth=0; }
@@ -2698,7 +2735,7 @@ function renderCalculateur() {
         return '<div style="padding:6px 0;border-bottom:1px solid var(--border)">'
           + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
           + '<span style="font-size:11px;color:var(--text3)">' + deb + ' → ' + fin + '</span>'
-          + (isSteph ? '<button class="icon-btn del" onclick="deleteRepPeriode(' + idx + ')">✕</button>' : '')
+          + (isSteph ? '<div style="display:flex;gap:4px"><button class="icon-btn" onclick="editRepPeriode(' + idx + ')" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px">✎</button><button class="icon-btn del" onclick="deleteRepPeriode(' + idx + ')">✕</button></div>' : '')
           + '</div>'
           + '<div class="prog-row"><div class="prog-label"><span style="color:#1A6FBA">Stéphane</span><span style="font-family:var(--mono)">' + h.stephane + '%</span></div>'
           + '<div class="prog-bar"><div class="prog-fill" style="width:' + h.stephane + '%;background:#1A6FBA"></div></div></div>'
@@ -3073,28 +3110,36 @@ function openModal(action, fille, type, id) {
       </div>
     `;
 
-  } else if (action === 'add-rep-periode') {
-    title.textContent = 'Nouvelle période de répartition';
+  } else if (action === 'add-rep-periode' || action === 'edit-rep-periode') {
+    const isEdit = action === 'edit-rep-periode';
+    const editIdx = modalContext.repIdx !== undefined ? modalContext.repIdx : -1;
+    const existing = isEdit ? (state.repartitionHistory||[])[editIdx] : null;
+    title.textContent = isEdit ? 'Modifier la période' : 'Nouvelle période de répartition';
     const curY = new Date().getFullYear();
     const curM = new Date().getMonth();
+    const initPct = existing ? existing.stephane : 65;
+    const initDebY = existing ? existing.debutYear : curY;
+    const initDebM = existing ? existing.debutMonth : curM;
+    const initFinY = existing ? existing.finYear : null;
+    const initFinM = existing ? existing.finMonth : null;
     box.innerHTML = `
       <div class="form-group">
         <label class="form-label">Part de Stéphane (%)</label>
         <div style="display:flex;align-items:center;gap:10px">
-          <input type="range" min="0" max="100" step="5" id="m-rep-pct" value="65"
+          <input type="range" min="0" max="100" step="5" id="m-rep-pct" value="${initPct}"
             oninput="document.getElementById('m-rep-pct-lbl').textContent=this.value;document.getElementById('m-rep-pct-c').textContent=100-parseInt(this.value)" style="flex:1">
           <span style="font-size:13px;min-width:80px;font-family:var(--mono)">
-            <strong id="m-rep-pct-lbl">65</strong>% / <span id="m-rep-pct-c">35</span>%
+            <strong id="m-rep-pct-lbl">${initPct}</strong>% / <span id="m-rep-pct-c">${100-initPct}</span>%
           </span>
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Valable à partir de</label>
-        <div style="display:flex;gap:6px">${monthSelectForm("m-rep-deb", curY, curM, true)}</div>
+        <div style="display:flex;gap:6px">${monthSelectForm("m-rep-deb", initDebY, initDebM, true)}</div>
       </div>
       <div class="form-group">
         <label class="form-label">Valable jusqu'à <span style="font-weight:400;color:var(--text3)">(optionnel)</span></label>
-        <div style="display:flex;gap:6px">${monthSelectForm("m-rep-fin", null, null, false)}</div>
+        <div style="display:flex;gap:6px">${monthSelectForm("m-rep-fin", initFinY, initFinM, false)}</div>
       </div>
     `;
 
@@ -3283,7 +3328,7 @@ function openModal(action, fille, type, id) {
 
   } else if (action === 'add-frais') {
     title.textContent = 'Ajouter un frais';
-    const pctSF = getRepartitionPct(mm, yy);
+    const pctSF = getRepartitionPct(m, y);
     box.innerHTML = `
       <div class="form-group">
         <label class="form-label">Enfant</label>
@@ -3388,13 +3433,29 @@ function openModal(action, fille, type, id) {
 }
 
 function fermerPanel() {
-  // Sauvegarder les modifications de montants/labels (pas les suppressions)
   const editList = document.getElementById('edit-list');
   if (editList) {
-    editList.querySelectorAll('.edit-row').forEach(row => {
+    const rows = [...editList.querySelectorAll('.edit-row')];
+    // Sauvegarder labels/montants/dates
+    rows.forEach(row => {
       if (row.dataset.type === 'rev') saveRevFixe(row.dataset.key, true);
       else if (row.dataset.type === 'ff') saveFraisFixe(row.dataset.key, true);
     });
+    // Sauvegarder l'ordre du DOM
+    const newOrder = rows.map(r => r.dataset.key);
+    const type = rows[0] ? rows[0].dataset.type : null;
+    if (type === 'rev') {
+      const newRev = {};
+      newOrder.forEach(k => { if (state.revenus[k]) newRev[k] = state.revenus[k]; });
+      Object.keys(state.revenus).forEach(k => { if (!newRev[k]) newRev[k] = state.revenus[k]; });
+      state.revenus = newRev;
+    } else if (type === 'ff') {
+      const ffMap = {};
+      (state.fraisFixes||[]).forEach(f => { ffMap[f.id] = f; });
+      state.fraisFixes = newOrder.map(k => ffMap[k]).filter(Boolean).concat(
+        (state.fraisFixes||[]).filter(f => !newOrder.includes(f.id))
+      );
+    }
   }
   closeModal();
 }
@@ -3622,6 +3683,43 @@ function deleteFrais(id, fille) {
 window.addEventListener('resize', () => {
   if (document.getElementById('page-dashboard').classList.contains('active')) { renderChart(); renderChart2(); renderChart3(); }
 });
-</script>
+
+function editRepPeriode(idx) {
+  const h = (state.repartitionHistory||[])[idx];
+  if (!h) return;
+  modalContext = { repIdx: idx };
+  modalAction = 'edit-rep-periode';
+  // Ouvrir directement sans passer par openModal (qui écraserait modalContext)
+  const modal = document.getElementById('modal-overlay');
+  const title = document.getElementById('modal-title');
+  const box = document.getElementById('modal-body');
+  const saveBtn = document.getElementById('modal-save-btn');
+  if (!modal) return;
+  if (saveBtn) saveBtn.style.display = '';
+  document.getElementById('modal-box').style.width = '';
+  modal.classList.add('open');
+  title.textContent = 'Modifier la période';
+  const MOIS_LBL = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  box.innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Part de Stéphane (%)</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="range" min="0" max="100" step="5" id="m-rep-pct" value="${h.stephane}"
+          oninput="document.getElementById('m-rep-pct-lbl').textContent=this.value;document.getElementById('m-rep-pct-c').textContent=100-parseInt(this.value)" style="flex:1">
+        <span style="font-size:13px;min-width:80px;font-family:var(--mono)">
+          <strong id="m-rep-pct-lbl">${h.stephane}</strong>% / <span id="m-rep-pct-c">${100-h.stephane}</span>%
+        </span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Valable à partir de</label>
+      <div style="display:flex;gap:6px">${monthSelectForm("m-rep-deb", h.debutYear, h.debutMonth, true)}</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Valable jusqu'à <span style="font-weight:400;color:var(--text3)">(optionnel)</span></label>
+      <div style="display:flex;gap:6px">${monthSelectForm("m-rep-fin", h.finYear||null, h.finMonth||null, false)}</div>
+    </div>
+  `;
+}</script>
 </body>
 </html>

@@ -919,6 +919,7 @@ function defaultState() {
     },
     revenusVerses: {},
     revenusOrder: [],
+    revenusOrder: [],
     repartitionFixe: { stephane: 65, cecile: 35 },
     repartitionExtra: { stephane: 50, cecile: 50 },
     repartitionHistory: [{ stephane: 65, debutMonth: 0, debutYear: 2025, finMonth: null, finYear: null }],
@@ -939,24 +940,10 @@ function defaultState() {
   };
 }
 
-// ─── Firebase config ─────────────────────────────────────────
-const firebaseConfig = {
-  apiKey: "AIzaSyClWVH3g6Mzl1hywj6lPeN4tE998VLFrIo",
-  authDomain: "cockpit-famille.firebaseapp.com",
-  databaseURL: "https://cockpit-famille-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "cockpit-famille",
-  storageBucket: "cockpit-famille.firebasestorage.app",
-  messagingSenderId: "930499662082",
-  appId: "1:930499662082:web:1cac6fa171cda8d133721b"
-};
-
-let _db = null;
-let _dbRef = null;
-let _listening = false;
+// Version locale — données dans localStorage uniquement
 
 function migrateState(p) {
-  if (!('fraisFixes' in p)) p.fraisFixes = defaultState().fraisFixes;
-  if (p.fraisFixes === null || p.fraisFixes === undefined) p.fraisFixes = [];
+  if (!p.fraisFixes) p.fraisFixes = defaultState().fraisFixes;
   if (!p.repartitionFixe) p.repartitionFixe = { stephane: 65, cecile: 35 };
   if (!p.repartitionHistory) p.repartitionHistory = [{ stephane: p.repartitionFixe.stephane, debutMonth: 0, debutYear: new Date().getFullYear(), finMonth: null, finYear: null }];
   if (!p.repartitionExtra) p.repartitionExtra = { stephane: 50, cecile: 50 };
@@ -978,8 +965,13 @@ function loadState() {
   return defaultState();
 }
 
+// ─── Firebase REST API ───────────────────────────────────────
+const FB_URL = 'https://cockpit-famille-default-rtdb.europe-west1.firebasedatabase.app/cockpit/data.json';
 let _saveTimeout = null;
 let _lastSaveTs = 0;
+let _lastHash = '';
+let _isPushing = false;
+
 function saveState() {
   state._savedAt = Date.now();
   _lastSaveTs = state._savedAt;
@@ -989,132 +981,79 @@ function saveState() {
   _saveTimeout = setTimeout(() => pushToFirebase(state), 300);
 }
 
-// pushToFirebase défini ci-dessus
+function prepareForFirebase(s) {
+  const d = JSON.parse(JSON.stringify(s));
+  if (!d.fraisFixes || d.fraisFixes.length === 0) d.fraisFixes = {'__empty': true};
+  if (!d.revenusExtra || d.revenusExtra.length === 0) d.revenusExtra = {'__empty': true};
+  if (!d.frais || d.frais.length === 0) d.frais = {'__empty': true};
+  return d;
+}
 
-// ─── Firebase REST API (sans SDK) ────────────────────────────
-const FB_URL = firebaseConfig.databaseURL + '/cockpit/data.json';
-let _pollInterval = null;
-let _lastHash = '';
-let _isPushing = false;
-let _deletingInProgress = false;
+function restoreFromFirebase(data) {
+  ['fraisFixes','revenusExtra','frais'].forEach(key => {
+    if (!data[key] || data[key].__empty) data[key] = [];
+  });
+  return data;
+}
 
 function setIndicator(text, color) {
   const ind = document.getElementById('sync-indicator');
   if (ind) { ind.textContent = text; ind.style.color = color; }
 }
 
-function initFirebase() {
-  // Envoyer l'état local au démarrage
-  pushToFirebase(state);
-  // Polling toutes les 10 secondes pour détecter les changements
-  _pollInterval = setInterval(pullFromFirebase, 10000);
-}
-
 async function pushToFirebase(stateToSave) {
   _isPushing = true;
   setIndicator('⬤ sync...', '#f0a500');
   try {
-    const prepared = prepareForFirebase(stateToSave);
-    const body = JSON.stringify(prepared);
+    const body = JSON.stringify(prepareForFirebase(stateToSave));
     _lastHash = JSON.stringify(stateToSave);
-    _lastSaveTs = stateToSave._savedAt || Date.now();
-    const res = await fetch(FB_URL, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: body
-    });
-    if (res.ok) {
-      setIndicator('⬤ en ligne', '#1D9E75');
-    } else {
-      setIndicator('⬤ erreur ' + res.status, '#C0392B');
-    }
-  } catch(e) {
-    setIndicator('⬤ hors ligne', '#888');
-  } finally {
-    setTimeout(() => { _isPushing = false; }, 3000);
-  }
-}
-
-function prepareForFirebase(stateToSave) {
-  const s = JSON.parse(JSON.stringify(stateToSave));
-  // Convertir les tableaux en objets keyés pour éviter leur suppression par Firebase
-  if (Array.isArray(s.fraisFixes)) {
-    const obj = {'__isArray': true};
-    s.fraisFixes.forEach((f,i) => { obj['i'+i] = f; });
-    s.fraisFixes = obj;
-  }
-  if (Array.isArray(s.revenusExtra)) {
-    const obj = {'__isArray': true};
-    s.revenusExtra.forEach((r,i) => { obj['i'+i] = r; });
-    s.revenusExtra = obj;
-  }
-  if (Array.isArray(s.frais)) {
-    const obj = {'__isArray': true};
-    s.frais.forEach((f,i) => { obj['i'+i] = f; });
-    s.frais = obj;
-  }
-  return s;
-}
-
-function restoreFromFirebase(data) {
-  // Reconvertir les objets keyés en tableaux
-  ['fraisFixes','revenusExtra','frais'].forEach(key => {
-    if (!data[key]) { data[key] = []; return; }
-    if (data[key].__isArray !== undefined) {
-      const arr = [];
-      Object.keys(data[key]).filter(k=>k!=='__isArray').sort().forEach(k => arr.push(data[key][k]));
-      data[key] = arr;
-    }
-  });
-  return data;
-}
-
-function pushToFirebaseXHR(stateToSave) {
-  const prepared = prepareForFirebase(stateToSave);
-  const body = JSON.stringify(prepared);
-  _lastHash = JSON.stringify(stateToSave);
-  _lastSaveTs = stateToSave._savedAt || Date.now();
-  const xhr = new XMLHttpRequest();
-  xhr.open('PUT', FB_URL, false);
-  xhr.setRequestHeader('Content-Type', 'application/json');
-  try {
-    xhr.send(body);
-    if (xhr.status === 200) {
-      setIndicator('⬤ en ligne', '#1D9E75');
-    } else {
-      setIndicator('⬤ erreur ' + xhr.status, '#C0392B');
-    }
-  } catch(e) {
-    setIndicator('⬤ hors ligne', '#888');
-  }
+    const res = await fetch(FB_URL, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
+    setIndicator(res.ok ? '⬤ en ligne' : '⬤ erreur', res.ok ? '#1D9E75' : '#C0392B');
+  } catch(e) { setIndicator('⬤ hors ligne', '#888'); }
+  finally { setTimeout(() => { _isPushing = false; }, 3000); }
 }
 
 async function pullFromFirebase() {
-  if (_isPushing) return; // Ne pas écraser pendant un push
+  if (_isPushing) return;
   try {
-    const res = await fetch(FB_URL + '?shallow=false', { cache: 'no-store' });
+    const res = await fetch(FB_URL + '?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
     if (!data) return;
-    const s = JSON.stringify(data);
-    if (s === _lastHash) return; // pas de changement
-    // Ignorer si nos données locales sont plus récentes
     const serverTs = data._savedAt || 0;
-    if (serverTs < _lastSaveTs) return; // on a des données plus récentes
-    _lastHash = s;
-    // Restaurer les sentinels Firebase en tableaux vides
-    data = restoreFromFirebase(data);
-    const newState = migrateState(data);
-    const ns = JSON.stringify(newState);
+    if (serverTs <= _lastSaveTs) return;
+    const ns = JSON.stringify(migrateState(restoreFromFirebase(data)));
     if (ns === JSON.stringify(state)) return;
-    state = newState;
+    state = JSON.parse(ns);
     _lastSaveTs = serverTs;
+    _lastHash = JSON.stringify(data);
     try { localStorage.setItem(STORAGE_KEY, ns); } catch(e) {}
     setIndicator('⬤ en ligne', '#1D9E75');
     refreshCurrentPage();
-  } catch(e) {
-    setIndicator('⬤ hors ligne', '#888');
+  } catch(e) { setIndicator('⬤ hors ligne', '#888'); }
+}
+
+function refreshCurrentPage() {
+  if (!currentUser) return;
+  const pages = ['dashboard','lucie','clotilde','comptes','journal','parametres','calculateur'];
+  for (const p of pages) {
+    const el = document.getElementById('page-' + p);
+    if (el && el.classList.contains('active')) {
+      if (p === 'dashboard') { renderDashboard(); renderChart(); renderChart2(); }
+      else if (p === 'lucie') renderFille('lucie');
+      else if (p === 'clotilde') renderFille('clotilde');
+      else if (p === 'comptes') renderComptes();
+      else if (p === 'journal') renderJournal();
+      else if (p === 'parametres') renderParametres();
+      else if (p === 'calculateur') renderCalculateur();
+      break;
+    }
   }
+}
+
+function initFirebase() {
+  pushToFirebase(state);
+  setInterval(pullFromFirebase, 10000);
 }
 
 function refreshCurrentPage() {
@@ -1344,11 +1283,16 @@ function estVerse(key, m, y) {
   return !!state.revenusVerses[key + '_' + y + '_' + m];
 }
 
-function revenusPourFille(fille) {
-  return Object.entries(state.revenus)
-    .filter(([,v]) => v.fille === fille)
-    .map(([k,v]) => ({ key: k, ...v }));
-}
+  function revenusPourFille(fille) {
+    if (!state.revenus) return [];
+    const order = (state.revenusOrder && state.revenusOrder.length)
+      ? state.revenusOrder
+      : Object.keys(state.revenus);
+    Object.keys(state.revenus).forEach(k => { if (!order.includes(k)) order.push(k); });
+    return order
+      .filter(k => state.revenus[k] && state.revenus[k].fille === fille)
+      .map(k => ({ key: k, ...state.revenus[k] }));
+  }
 
 function revenusPourFilleActifs(fille, mm, yy) {
   if (!state.revenus) return [];
@@ -1757,7 +1701,7 @@ function renderDashboard() {
   // Revenus fixes — utilise revenusPourFille pour cohérence avec les calculs
   const dbRevFixes = document.getElementById('db-rev-fixes');
   if (dbRevFixes) {
-    const allRF = [...revenusPourFilleActifs('lucie',m,y), ...revenusPourFilleActifs('clotilde',m,y)];
+    const allRF = (() => { const order = (state.revenusOrder&&state.revenusOrder.length) ? state.revenusOrder : Object.keys(state.revenus||{}); return order.filter(k=>state.revenus[k]&&fixeActif(state.revenus[k],m,y)).map(k=>({key:k,...state.revenus[k]})); })();
     const totalRF = allRF.reduce((s,r)=>s+(r.montant||0),0);
     dbRevFixes.innerHTML = allRF.length
       ? '<div style="display:flex;align-items:center;padding:0 0 4px 0;gap:6px"><span style="font-size:9px;font-weight:400;color:var(--text3);width:22px;text-align:center">Versé</span></div>' +
@@ -2402,7 +2346,7 @@ function openEditPanel(type) {
   function renderRows() {
     if (type === 'rev-fixes') {
       title.textContent = 'Éditer les revenus fixes';
-      const allItems = [...revenusPourFille('lucie'), ...revenusPourFille('clotilde')];
+      const allItems = (() => { const order = (state.revenusOrder&&state.revenusOrder.length) ? state.revenusOrder : Object.keys(state.revenus||{}); return order.filter(k=>state.revenus[k]).map(k=>({key:k,...state.revenus[k]})); })();
       if (!allItems.length) { box.innerHTML = '<div class="empty">Aucun revenu fixe enregistré.</div>'; return; }
       const mm = state.currentMonth, yy = state.currentYear;
       const actifs = allItems.filter(r => fixeActif(r, mm, yy));
@@ -2412,7 +2356,10 @@ function openEditPanel(type) {
         const finV = (r.finYear!==null && r.finYear!==undefined) ? r.finYear+'-'+String(r.finMonth+1).padStart(2,'0') : '';
         return `<div class="edit-row" data-key="${r.key}" data-type="rev" style="padding:8px 0;border-bottom:1px solid var(--border)">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <span class="drag-handle" style="${DRAG_STYLE}" draggable="true">☰</span>
+            <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+              <button onclick="moveRevRow('${r.key}',-1)" style="padding:0 5px;background:none;border:1px solid var(--border);border-radius:4px;font-size:10px;cursor:pointer;line-height:1.4;color:var(--text2)">↑</button>
+              <button onclick="moveRevRow('${r.key}',1)" style="padding:0 5px;background:none;border:1px solid var(--border);border-radius:4px;font-size:10px;cursor:pointer;line-height:1.4;color:var(--text2)">↓</button>
+            </div>
             <span class="tag" style="font-size:9px;color:${r.fille==='lucie'?'var(--lucie)':'var(--clotilde)'};border:1px solid ${r.fille==='lucie'?'var(--lucie)':'var(--clotilde)'};background:transparent;flex-shrink:0">${r.fille==='lucie'?'Lucie':'Clotilde'}</span>
             <input value="${r.label}" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font);background:var(--bg);color:var(--text)" id="rf-lbl-${r.key}" />
             <input type="number" value="${r.montant}" style="width:80px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--mono);background:var(--bg);color:var(--text);text-align:right" id="rf-amt-${r.key}" />
@@ -2447,7 +2394,10 @@ function openEditPanel(type) {
         const finVF = (f.finYear!==null && f.finYear!==undefined) ? f.finYear+'-'+String(f.finMonth+1).padStart(2,'0') : '';
         return `<div class="edit-row" data-key="${f.id}" data-type="ff" style="padding:8px 0;border-bottom:1px solid var(--border)">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <span class="drag-handle" style="${DRAG_STYLE}" draggable="true">☰</span>
+            <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+              <button onclick="moveFFRow('${f.id}',-1)" style="padding:0 5px;background:none;border:1px solid var(--border);border-radius:4px;font-size:10px;cursor:pointer;line-height:1.4;color:var(--text2)">↑</button>
+              <button onclick="moveFFRow('${f.id}',1)" style="padding:0 5px;background:none;border:1px solid var(--border);border-radius:4px;font-size:10px;cursor:pointer;line-height:1.4;color:var(--text2)">↓</button>
+            </div>
             <span class="tag" style="font-size:9px;color:${f.fille==='lucie'?'var(--lucie)':'var(--clotilde)'};border:1px solid ${f.fille==='lucie'?'var(--lucie)':'var(--clotilde)'};background:transparent;flex-shrink:0">${f.fille==='lucie'?'Lucie':'Clotilde'}</span>
             <input value="${f.label}" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font);background:var(--bg);color:var(--text)" id="ff-lbl-${f.id}" />
             <input type="number" value="${f.montant}" style="width:80px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--mono);background:var(--bg);color:var(--text);text-align:right" id="ff-amt-${f.id}" />
@@ -2508,6 +2458,44 @@ function openEditPanel(type) {
   }
 }
 
+  function moveRevRow(key, dir) {
+    const list = document.getElementById('edit-list');
+    if (!list) return;
+    const rows = [...list.querySelectorAll('.edit-row')];
+    const idx = rows.findIndex(r => r.dataset.key === key);
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= rows.length) return;
+    if (dir === -1) list.insertBefore(rows[idx], rows[newIdx]);
+    else list.insertBefore(rows[newIdx], rows[idx]);
+    // Reconstruire state.revenus dans le bon ordre (comme fraisFixes)
+    const newOrder = [...list.querySelectorAll('.edit-row')].map(r => r.dataset.key);
+    const newRev = {};
+    newOrder.forEach(k => { if (state.revenus[k]) newRev[k] = state.revenus[k]; });
+    Object.keys(state.revenus).forEach(k => { if (!newRev[k]) newRev[k] = state.revenus[k]; });
+    state.revenus = newRev;
+    state.revenusOrder = Object.keys(newRev);
+    saveState();
+    if (document.getElementById('page-dashboard') && document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
+  }
+
+function moveFFRow(id, dir) {
+  const list = document.getElementById('edit-list');
+  if (!list) return;
+  const rows = [...list.querySelectorAll('.edit-row')];
+  const idx = rows.findIndex(r => r.dataset.key === id);
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= rows.length) return;
+  if (dir === -1) list.insertBefore(rows[idx], rows[newIdx]);
+  else list.insertBefore(rows[newIdx], rows[idx]);
+  const newOrder = [...list.querySelectorAll('.edit-row')].map(r => r.dataset.key);
+  const ffMap = {};
+  (state.fraisFixes||[]).forEach(f => { ffMap[f.id] = f; });
+  state.fraisFixes = newOrder.map(k => ffMap[k]).filter(Boolean).concat(
+    (state.fraisFixes||[]).filter(f => !newOrder.includes(f.id))
+  );
+  saveState();
+}
+
 function saveRevFixe(key, silent) {
   const lbl = document.getElementById('rf-lbl-'+key);
   const amt = document.getElementById('rf-amt-'+key);
@@ -2533,19 +2521,13 @@ function saveRevFixe(key, silent) {
 
 function deleteRevFixe(key, fille) {
   if (!confirm('Supprimer ce revenu fixe ?')) return;
-  _deletingInProgress = true;
   const r = state.revenus[key];
   if (r) logAction('Revenu fixe supprimé : <strong>' + r.label + '</strong>');
   delete state.revenus[key];
   state.revenusOrder = (state.revenusOrder||[]).filter(k => k !== key);
-  state._savedAt = Date.now();
-  _lastSaveTs = state._savedAt;
-  if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
-  pushToFirebase(state);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  saveState();
   if (document.getElementById('edit-list')) openEditPanel('rev-fixes');
   renderDashboard();
-  setTimeout(() => { _deletingInProgress = false; }, 1000);
 }
 
 function saveFraisFixe(id, silent) {
@@ -2572,18 +2554,12 @@ function saveFraisFixe(id, silent) {
 
 function deleteFraisFixeInline(id) {
   if (!confirm('Supprimer ce frais fixe ?')) return;
-  _deletingInProgress = true;
   const ff = (state.fraisFixes||[]).find(f=>f.id===id);
   if (ff) logAction('Frais fixe supprimé : <strong>' + ff.label + '</strong>');
   state.fraisFixes = (state.fraisFixes||[]).filter(f=>f.id!==id);
-  state._savedAt = Date.now();
-  _lastSaveTs = state._savedAt;
-  if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
-  pushToFirebaseXHR(state); // synchrone — Firebase reçoit AVANT le re-render
+  saveState();
   if (document.getElementById('edit-list')) openEditPanel('frais-fixes');
   renderDashboard();
-  setTimeout(() => { _deletingInProgress = false; }, 500);
 }
 
 function toggleCumulTexte() {
@@ -2643,6 +2619,44 @@ function renderComptes() {
     html += '</div></div>';
   });
   el.innerHTML = html;
+}
+
+function editRepPeriode(idx) {
+  const h = (state.repartitionHistory||[])[idx];
+  if (!h) return;
+  modalContext = { repIdx: idx };
+  modalAction = 'edit-rep-periode';
+  // Ouvrir directement sans passer par openModal (qui écraserait modalContext)
+  const modal = document.getElementById('modal-overlay');
+  const title = document.getElementById('modal-title');
+  const box = document.getElementById('modal-body');
+  const saveBtn = document.getElementById('modal-save-btn');
+  if (!modal) return;
+  if (saveBtn) saveBtn.style.display = '';
+  document.getElementById('modal-box').style.width = '';
+  modal.classList.add('open');
+  title.textContent = 'Modifier la période';
+  const MOIS_LBL = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  box.innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Part de Stéphane (%)</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="range" min="0" max="100" step="5" id="m-rep-pct" value="${h.stephane}"
+          oninput="document.getElementById('m-rep-pct-lbl').textContent=this.value;document.getElementById('m-rep-pct-c').textContent=100-parseInt(this.value)" style="flex:1">
+        <span style="font-size:13px;min-width:80px;font-family:var(--mono)">
+          <strong id="m-rep-pct-lbl">${h.stephane}</strong>% / <span id="m-rep-pct-c">${100-h.stephane}</span>%
+        </span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Valable à partir de</label>
+      <div style="display:flex;gap:6px">${monthSelectForm("m-rep-deb", h.debutYear, h.debutMonth, true)}</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Valable jusqu'à <span style="font-weight:400;color:var(--text3)">(optionnel)</span></label>
+      <div style="display:flex;gap:6px">${monthSelectForm("m-rep-fin", h.finYear||null, h.finMonth||null, false)}</div>
+    </div>
+  `;
 }
 
 function deleteRepPeriode(idx) {
@@ -3456,21 +3470,25 @@ function fermerPanel() {
     }
   }
   closeModal();
+  if (document.getElementById('page-dashboard') && document.getElementById('page-dashboard').classList.contains('active')) { renderDashboard(); renderChart(); }
+
 }
 
 function closeModal(e) {
   if (e && e.target !== document.getElementById('modal-overlay')) return;
+  // Sauvegarder toutes les lignes du panneau d'édition
+  const editList = document.getElementById('edit-list');
+  if (editList) {
+    editList.querySelectorAll('.edit-row').forEach(row => {
+      if (row.dataset.type === 'rev') saveRevFixe(row.dataset.key, true);
+      else if (row.dataset.type === 'ff') saveFraisFixe(row.dataset.key, true);
+    });
+  }
   document.getElementById('modal-overlay').classList.remove('open');
   const saveBtn = document.getElementById('modal-save-btn');
   if (saveBtn) saveBtn.style.display = '';
   const box = document.getElementById('modal-box');
   if (box) box.style.width = '';
-  // Push final à Firebase
-  state._savedAt = Date.now();
-  _lastSaveTs = state._savedAt;
-  if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; }
-  pushToFirebaseXHR(state);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
   if (document.getElementById('page-dashboard') && document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
 }
 
@@ -3529,18 +3547,23 @@ function modalSave() {
     document.getElementById('modal-overlay').classList.remove('open');
     renderComptes();
 
-  } else if (modalAction === 'add-rep-periode') {
+  } else if (modalAction === 'add-rep-periode' || modalAction === 'edit-rep-periode') {
     const pct = parseInt(document.getElementById('m-rep-pct').value) || 65;
     const debVal = getMonthSelectVal('m-rep-deb');
     const finVal = getMonthSelectVal('m-rep-fin');
     if (!debVal) { alert('Veuillez saisir une date de début.'); return; }
     if (!state.repartitionHistory) state.repartitionHistory = [];
-    state.repartitionHistory.push({ stephane: pct, debutMonth: debVal.month, debutYear: debVal.year, finMonth: finVal ? finVal.month : null, finYear: finVal ? finVal.year : null });
+    const newPeriode = { stephane: pct, debutMonth: debVal.month, debutYear: debVal.year, finMonth: finVal ? finVal.month : null, finYear: finVal ? finVal.year : null };
+    if (modalAction === 'edit-rep-periode' && modalContext.repIdx !== undefined) {
+      state.repartitionHistory[modalContext.repIdx] = newPeriode;
+    } else {
+      state.repartitionHistory.push(newPeriode);
+    }
     state.repartitionHistory.sort((a,b) => a.debutYear!==b.debutYear ? a.debutYear-b.debutYear : a.debutMonth-b.debutMonth);
     const lastActive = [...state.repartitionHistory].reverse().find(h => h.finYear===null||h.finYear===undefined);
     if (lastActive) state.repartitionFixe = { stephane: lastActive.stephane, cecile: 100-lastActive.stephane };
     saveState();
-    logAction('Nouvelle clé répartition fixes : <strong>Stéphane ' + pct + '% / Cécile ' + (100-pct) + '%</strong>');
+    logAction((modalAction==='edit-rep-periode'?'Période modifiée':'Nouvelle clé') + ' : <strong>Stéphane ' + pct + '% / Cécile ' + (100-pct) + '%</strong>');
     document.getElementById('modal-overlay').classList.remove('open');
     renderCalculateur();
     if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
@@ -3683,43 +3706,6 @@ function deleteFrais(id, fille) {
 window.addEventListener('resize', () => {
   if (document.getElementById('page-dashboard').classList.contains('active')) { renderChart(); renderChart2(); renderChart3(); }
 });
-
-function editRepPeriode(idx) {
-  const h = (state.repartitionHistory||[])[idx];
-  if (!h) return;
-  modalContext = { repIdx: idx };
-  modalAction = 'edit-rep-periode';
-  // Ouvrir directement sans passer par openModal (qui écraserait modalContext)
-  const modal = document.getElementById('modal-overlay');
-  const title = document.getElementById('modal-title');
-  const box = document.getElementById('modal-body');
-  const saveBtn = document.getElementById('modal-save-btn');
-  if (!modal) return;
-  if (saveBtn) saveBtn.style.display = '';
-  document.getElementById('modal-box').style.width = '';
-  modal.classList.add('open');
-  title.textContent = 'Modifier la période';
-  const MOIS_LBL = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-  box.innerHTML = `
-    <div class="form-group">
-      <label class="form-label">Part de Stéphane (%)</label>
-      <div style="display:flex;align-items:center;gap:10px">
-        <input type="range" min="0" max="100" step="5" id="m-rep-pct" value="${h.stephane}"
-          oninput="document.getElementById('m-rep-pct-lbl').textContent=this.value;document.getElementById('m-rep-pct-c').textContent=100-parseInt(this.value)" style="flex:1">
-        <span style="font-size:13px;min-width:80px;font-family:var(--mono)">
-          <strong id="m-rep-pct-lbl">${h.stephane}</strong>% / <span id="m-rep-pct-c">${100-h.stephane}</span>%
-        </span>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Valable à partir de</label>
-      <div style="display:flex;gap:6px">${monthSelectForm("m-rep-deb", h.debutYear, h.debutMonth, true)}</div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Valable jusqu'à <span style="font-weight:400;color:var(--text3)">(optionnel)</span></label>
-      <div style="display:flex;gap:6px">${monthSelectForm("m-rep-fin", h.finYear||null, h.finMonth||null, false)}</div>
-    </div>
-  `;
-}</script>
+</script>
 </body>
 </html>
